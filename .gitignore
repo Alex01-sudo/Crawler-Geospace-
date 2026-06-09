@@ -1,15 +1,13 @@
-# === AMBIENTI VIRTUALI ===
-# Ignora specificamente il tuo ambiente virtuale
+
 crawler_env/
 
-# Ignora anche altri nomi comuni di venv (per sicurezza futura)
+
 venv/
 .venv/
 env/
 ENV/
 
-# === CACHE DI PYTHON ===
-# Ignora i file compilati di Python e le cartelle di cache
+
 __pycache__/
 *.pyc
 *.pyo
@@ -17,15 +15,14 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 
-# === FILE DI CONFIGURAZIONE E SEGRETI ===
-# MAI fare il commit di password o chiavi API
+
 .env
 .env.local
 .env.*.local
 instance/
 config.ini
 
-# === FILE DI SISTEMA ===
+
 .DS_Store
 Thumbs.db
 Desktop.ini
