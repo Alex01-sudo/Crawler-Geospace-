@@ -1,0 +1,21 @@
+
+
+services:
+  arangodb:
+    image: arangodb:3.11
+    container_name: arangodb-crawler-persistent
+    ports:
+      - "8529:8529"
+    environment:
+      - ARANGO_ROOT_PASSWORD=${ARANGO_ROOT_PASSWORD}
+    volumes:
+      
+      - arango_data:/var/lib/arangodb3
+      
+      - arango_apps:/var/lib/arangodb3-apps
+
+volumes:
+  arango_data:
+    driver: local
+  arango_apps:
+    driver: local

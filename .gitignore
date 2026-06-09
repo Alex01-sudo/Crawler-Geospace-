@@ -26,3 +26,6 @@ config.ini
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+
+.env

@@ -1,0 +1,13 @@
+# Google Earth Engine API
+earthengine-api>=1.5.0
+
+# Libreria per le richieste HTTP (usata per scaricare il file dal link)
+requests>=2.31.0
+
+PILLOW>=9.5.0
+matplotlib>=3.7.0
+rasterio>=1.0.0
+geopy>=2.4.0
+networkx>=3.0.0
+python-arango>=8.0.0
+python-dotenv>=1.0.0
