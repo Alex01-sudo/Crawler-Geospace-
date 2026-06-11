@@ -1,105 +1,122 @@
 from arango import ArangoClient
 import os
-password = os.getenv("ARANGO_ROOT_PASSWORD", "password_di_backup")
+from dotenv import load_dotenv
+from datetime import datetime
+
+load_dotenv()
+password = os.getenv("ARANGO_ROOT_PASSWORD")
+
+if not password:
+    raise ValueError("ARANGO_ROOT_PASSWORD not found. Check the .env file.")
 
 class ArangoStorageManager:
     def __init__(self, hosts="http://localhost:8529", username="root", password= password, db_name="GeospaceCrawler"):
-        # Inizializza il client ArangoDB
+        
         self.client = ArangoClient(hosts=hosts)
         
-        # Connettiti al database di sistema per verificare/creare il tuo database dedicato
         sys_db = self.client.db("_system", username=username, password=password)
         if not sys_db.has_database(db_name):
             sys_db.create_database(db_name)
         
-        # Connettiti al database del progetto
         self.db = self.client.db(db_name, username=username, password=password)
         self.init_graph_structure()
 
     def init_graph_structure(self):
-        """Crea le collezioni di documenti, archi e la definizione del grafo se non esistono."""
-        # 1. Crea la collezione dei Nodi (Capitali)
-        if not self.db.has_collection("capitali"):
-            self.db.create_collection("capitali")
+        
+         
+        if not self.db.has_collection("capitals"):
+            self.db.create_collection("capitals")
             
-        # 2. Crea la collezione degli Archi (Collegamenti) con tipo 'edge'
-        if not self.db.has_collection("collegamenti_distanza"):
-            self.db.create_collection("collegamenti_distanza", edge=True)
+        
+        if not self.db.has_collection("distances"):
+            self.db.create_collection("distances", edge=True)
 
-        # 3. Definisce il grafo all'interno di ArangoDB
+       
         if not self.db.has_graph("UsaCapitalsGraph"):
             self.db.create_graph(
                 "UsaCapitalsGraph",
                 edge_definitions=[
                     {
-                        "edge_collection": "collegamenti_distanza",
-                        "from_vertex_collections": ["capitali"],
-                        "to_vertex_collections": ["capitali"]
+                        "edge_collection": "distances",
+                        "from_vertex_collections": ["capitals"],
+                        "to_vertex_collections": ["capitals"]
                     }
                 ]
             )
 
-    def upsert_capitale(self, citta: str, stato: str, lat: float, lon: float, buffer_m: int, scale: float):
-        """Inserisce o aggiorna i dati di input di una capitale (Nodo)."""
-        capitali_coll = self.db.collection("capitali")
+    def upsert_capital(self, city: str, state: str, lat: float, lon: float, buffer_m: int, scale: float):
+        
+        capitals_coll = self.db.collection("capitals")
         
         # Usiamo il nome della città pulito come chiave univoca (_key) di ArangoDB
-        key = citta.lower().replace(" ", "_")
+        key = city.lower().replace(" ", "_")
         
         documento = {
             "_key": key,
-            "citta": citta,
-            "stato": stato,
+            "city": city,
+            "state": state,
             "lat": lat,
             "lon": lon,
             "buffer_m": buffer_m,
             "scale": scale,
             "visited": False,
             "file_tif_path": None,
-            "immagini_utilizzate": 0
+            "file_path_geojson": None,
+            "image_count": 0
         }
         
         # Inserisce o aggiorna se già esistente
-        capitali_coll.insert(documento, overwrite=True)
+        capitals_coll.insert(documento, overwrite=True)
 
-    def aggiungi_collegamento(self, citta_A: str, citta_B: str, distanza_metri: float):
-        """Crea un arco pesato tra due capitali nel grafo."""
-        edge_coll = self.db.collection("collegamenti_distanza")
+    def get_lon_lat(self, citta: str):
+        capitals_coll = self.db.collection("capitals")
+        key = citta.lower().replace(" ", "_")
+        query = f"""FOR cap IN capitals
+                    FILTER cap._key == "{key}"
+                    RETURN {{"lat": cap.lat, "lon" : cap.lon}}"""
+        cursor = self.db.aql.execute(query)
+        result = cursor.next()
+        return result 
+
+    def add_edge(self, city_A: str, city_B: str, distance_km: float):
         
-        key_A = citta_A.lower().replace(" ", "_")
-        key_B = citta_B.lower().replace(" ", "_")
+        edge_coll = self.db.collection("distances")
+        
+        key_A = city_A.lower().replace(" ", "_")
+        key_B = city_B.lower().replace(" ", "_")
         
         arco = {
-            "_from": f"capitali/{key_A}",
-            "_to": f"capitali/{key_B}",
-            "distanza_m": distanza_metri
+            "_from": f"capitals/{key_A}",
+            "_to": f"capitals/{key_B}",
+            "distance_km": distance_km
         }
         
-        # Generiamo una chiave univoca per l'arco basata sui due nodi per evitare duplicati
+        
         arco["_key"] = f"{key_A}_to_{key_B}"
         edge_coll.insert(arco, overwrite=True)
 
-    def ottieni_capitali_da_visitare(self) -> list:
-        """Esegue una query AQL per estrarre tutti i documenti non ancora visitati."""
+    def capitals_to_visit(self) -> list:
         query = """
-        FOR c IN capitali
+        FOR c IN capitals
             FILTER c.visited == false
             RETURN c
         """
         cursor = self.db.aql.execute(query)
         return [doc for doc in cursor]
 
-    def segna_come_completato(self, citta: str, tif_path: str, img_count: int):
-        """Aggiorna lo stato del nodo una volta completato il download da GEE."""
-        from datetime import datetime
-        key = citta.lower().replace(" ", "_")
-        capitali_coll = self.db.collection("capitali")
+    def set_visited(self, city: str, drive_tif_path: str, drive_geojson_path: str, img_count: int):
+        """Updates the capital document marking it as visited and storing the Google Drive cloud paths."""
+        key = city.lower().replace(" ", "_")
+        capitals_coll = self.db.collection("capitals")
         
-        aggiornamento = {
+        update_data = {
             "_key": key,
             "visited": True,
-            "data_download": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "file_tif_path": str(tif_path),
-            "immagini_utilizzate": img_count
+            "download_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "file_tif_path": str(drive_tif_path),
+            "file_geojson_path": str(drive_geojson_path),
+            "images_count": img_count
         }
-        capitali_coll.update(aggiornamento)
+        capitals_coll.update(update_data)
+        
+   

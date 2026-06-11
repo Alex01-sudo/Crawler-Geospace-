@@ -1,8 +1,13 @@
 import json
 import time
 from pathlib import Path
+from dotenv import load_dotenv
 from geopy.geocoders import Nominatim
-from Calculate_dist import Metric_distance 
+from Utils.Calculate_dist import Metric_distance 
+from Software_Crawler.Storage import ArangoStorageManager
+
+
+
 
 Capitals = [
     {"city": "Montgomery", "state": "Alabama"},
@@ -58,65 +63,65 @@ Capitals = [
     
 ]
 
-geolocator = Nominatim(user_agent="usa_capitals_crawler")
-dataset = []
 
-print("Recovering coordinates from OpenStreetMap...")
-for cap in Capitals:
-    query = f"{cap['city']}, {cap['state']}, USA"
-    try:
-        location = geolocator.geocode(query, addressdetails=True)
-        if location:
-            bbox = location.raw.get("boundingbox", [])
-            
-            buffer_stimato = 10000 
 
-            dataset.append({
-                "city": cap["city"],
-                "state": cap["state"],
-                "lat": location.latitude,
-                "lon": location.longitude,
-                "buffer_m": buffer_stimato,
-                "scale": 10.0,
-                "distances" : []}
-            )
+
+def main():
+
+
+    geolocator = Nominatim(user_agent="usa_capitals_crawler")
+    dataset = ArangoStorageManager()
+    
+    distances = []
+
+    print("Recovering coordinates from OpenStreetMap...")
+    for cap in Capitals:
+        query = f"{cap['city']}, {cap['state']}, USA"
+        try:
+            location = geolocator.geocode(query, addressdetails=True)
+            if location:
+                bbox = location.raw.get("boundingbox", [])
+                
+                buffer_stimato = 10000 
+
+                dataset.upsert_capital(
+                    citta=cap["city"],
+                    stato=cap["state"],
+                    lat=location.latitude,
+                    lon=location.longitude,
+                    buffer_m=buffer_stimato,
+                    scale=10.0
+                )
+                distances.append({
+                    "city": cap["city"],
+                    "lat": location.latitude,
+                    "lon": location.longitude
+                })
+                print(f"Found: {cap['city']}, {cap['state']} at ({location.latitude}, {location.longitude})")
+            else:
+                print(f"Location not found for {cap['city']}, {cap['state']}")
             
-            print(f"Found: {cap['city']}, {cap['state']} at ({location.latitude}, {location.longitude})")
-        else:
-            print(f"Location not found for {cap['city']}, {cap['state']}")
-        
-        
-        time.sleep(1)
-        
-    except Exception as e:
-        print(f"Error with {cap['city']}: {e}")
-        
-for entry in dataset:
-    list_of_distances = []
-    for other_entry in dataset:
-        if entry != other_entry:
-            distance = Metric_distance(
-                entry["lat"], entry["lon"], other_entry["lat"], other_entry["lon"]
-            )
-            list_of_distances.append({
-                "city": other_entry["city"],
-                "distance_km": distance
-            })
-    entry["distances"] = list_of_distances
+            
+            time.sleep(1)
+            
+        except Exception as e:
+            print(f"Error with {cap['city']}: {e}")
+    
+    
+    for entry in distances:
+        for other_entry in distances:
+            if entry != other_entry:
+                distance = Metric_distance(
+                    entry["lat"], entry["lon"], other_entry["lat"], other_entry["lon"]
+                )
+                dataset.add_edge(entry["city"], other_entry["city"], distance)
+                print(f"Distance between {entry['city']} and {other_entry['city']}: {distance:.2f} Km")
+    
+
+
+if __name__ == "__main__":
+    main()
     
 
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-
-output_path = BASE_DIR / "data" / "capitals_usa.json"
-
-
-output_path.parent.mkdir(parents=True, exist_ok=True)
-
-
-with open(output_path, "w", encoding="utf-8") as f:
-    json.dump(dataset, f, indent=4)
-
-print(f"\nFile '{output_path}' created successfully!")

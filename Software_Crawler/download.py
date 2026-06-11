@@ -7,13 +7,9 @@ from pathlib import Path
 
 import ee
 import requests
+import time
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-
-output_path_tif = BASE_DIR / "data" / "raw" / "S2_square_gee.tif"
-outputh_path_geojson = BASE_DIR / "data" / "raw" / "S2_square_roi.geojson"
 
 
 
@@ -102,17 +98,19 @@ def ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
-def download_sentinel_composite(
+
+
+def download_sentinel_composite_to_drive(
     lat: float,
     lon: float,
     buffer_m: float = 1000.0,
-    start: str = "2023-06-01",
-    end: str = "2023-08-31",
+    start_date: str = "2023-06-01",
+    end_date: str = "2023-08-31",
     cloud_max: float = 10.0,
     bands: list[str] = ["B2", "B3", "B4", "B8", "B11", "B12"],
     scale: float = 10.0,
-    output: str = output_path_tif,
-    roi_json: str = outputh_path_geojson,
+    city_name: str = "capital_task",
+    drive_folder: str = "GEE_Crawler_Outputs",
     project: str | None = None,
     service_account: str | None = None,
     service_account_key: str | None = None,
@@ -123,77 +121,88 @@ def download_sentinel_composite(
     service_account = service_account or os.getenv("GEE_SERVICE_ACCOUNT")
     service_account_key = service_account_key or os.getenv("GEE_SERVICE_ACCOUNT_KEY")
     
-    
     initialize_ee(project, service_account, service_account_key)
-
 
     point = ee.Geometry.Point([lon, lat])
     square = point.buffer(buffer_m).bounds()
 
-    collection = (
+    image_collection = (
         ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
         .filterBounds(square)
-        .filterDate(start, end)
+        .filterDate(start_date, end_date)
         .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", cloud_max))
     )
 
-    image_count = int(collection.size().getInfo())
+    image_count = int(image_collection.size().getInfo())
     if image_count == 0:
         raise RuntimeError(
             f"No Sentinel-2 images found for coordinates ({lat}, {lon}) with current constraints."
         )
 
-    composite = collection.median().select(bands).clip(square)
-
-    # Salvataggio GeoTIFF locale
-    output_path = Path(output)
-    ensure_parent(output_path)
-
-    download_url = composite.getDownloadURL(
-        {
-            "name": output_path.stem,
-            "region": square,
-            "scale": scale,
-            "format": "GEO_TIFF",
-        }
-    )
-
-    response = requests.get(download_url, timeout=300)
-    response.raise_for_status()
-    output_path.write_bytes(response.content)
+    composite_image = image_collection.median().select(bands).clip(square)
+    file_prefix = f"S2_{city_name.lower().replace(' ', '_')}"
 
     
-    roi_geojson = {
-        "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "properties": {
-                    "lat": lat,
-                    "lon": lon,
-                    "buffer_m": buffer_m,
-                    "start": start,
-                    "end": end,
-                    "cloud_max": cloud_max,
-                },
-                "geometry": square.getInfo(),
-            }
-        ],
-    }
-    roi_path = Path(roi_json)
-    ensure_parent(roi_path)
-    roi_path.write_text(json.dumps(roi_geojson, indent=2), encoding="utf-8")
+    image_task = ee.batch.Export.image.toDrive(
+        image=composite_image,
+        description=f"{file_prefix}_image",
+        folder=drive_folder,
+        fileNamePrefix=file_prefix,
+        region=square,
+        scale=scale,
+        fileFormat="GeoTIFF",
+        maxPixels=1e9
+    )
 
-    print(f"-> Earth Engine download completed for ({lat}, {lon}). Images used: {image_count}")
+    roi_feature = ee.Feature(square, {
+        "lat": lat,
+        "lon": lon,
+        "buffer_m": buffer_m,
+        "start_date": start_date,
+        "end_date": end_date,
+        "cloud_max": cloud_max,
+        "image_count": image_count
+    })
+    roi_collection = ee.FeatureCollection([roi_feature])
+
+    table_task = ee.batch.Export.table.toDrive(
+        collection=roi_collection,
+        description=f"{file_prefix}_roi",
+        folder=drive_folder,
+        fileNamePrefix=f"{file_prefix}_roi",
+        fileFormat="GeoJSON"
+    )
+
+    
+    image_task.start()
+    table_task.start()
+    print(f" Tasks started in the Cloud for {city_name}.")
+    print(f"   Image Task ID: {image_task.id}")
+    print(f"   ROI Table Task ID: {table_task.id}")
+    
+    while image_task.active() or table_task.active():
+        print(f" Processing {city_name} on Google servers...")
+        print(f"  [Image Status: {image_task.status()['state']}] [ROI Status: {table_task.status()['state']}]")
+        time.sleep(15)  
+        
+    
+    final_image_status = image_task.status()
+    final_table_status = table_task.status()
+
+    if final_image_status['state'] == 'COMPLETED' and final_table_status['state'] == 'COMPLETED':
+        print(f" Success! Both files for {city_name} are now saved in your Google Drive under '{drive_folder}'")
+    else:
+        error_msg = f"Image Error: {final_image_status.get('errorMessage', 'None')} | Table Error: {final_table_status.get('errorMessage', 'None')}"
+        raise RuntimeError(f" Earth Engine tasks failed for {city_name}. Details: {error_msg}")
+
     return image_count
-
 
 def main() -> None:
     """Mantiene la compatibilità per l'esecuzione diretta da Terminale."""
     args = build_parser().parse_args()
     
     
-    download_sentinel_composite(**vars(args))
+    download_sentinel_composite_to_drive(**vars(args))
 
 
 if __name__ == "__main__":

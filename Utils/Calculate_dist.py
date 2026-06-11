@@ -1,3 +1,6 @@
+import math
+
+
 def Metric_distance(lat1, lon1, lat2, lon2):
     """
     Calculate the distance in meters between two geographic points using the Haversine formula.
@@ -21,5 +24,6 @@ def Metric_distance(lat1, lon1, lat2, lon2):
     a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
     c = 2 * asin(sqrt(a)) 
     r = 6371000  
-    return c * r
+    result = (c * r)/1000.0
+    return round(result, 3)
 
