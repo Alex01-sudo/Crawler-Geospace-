@@ -48,7 +48,7 @@ class ArangoStorageManager:
         
         capitals_coll = self.db.collection("capitals")
         
-        # Usiamo il nome della città pulito come chiave univoca (_key) di ArangoDB
+        
         key = city.lower().replace(" ", "_")
         
         documento = {
@@ -65,7 +65,7 @@ class ArangoStorageManager:
             "image_count": 0
         }
         
-        # Inserisce o aggiorna se già esistente
+        
         capitals_coll.insert(documento, overwrite=True)
 
     def get_lon_lat(self, citta: str):
