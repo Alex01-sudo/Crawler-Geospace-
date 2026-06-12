@@ -22,4 +22,5 @@ if __name__ == "__main__":
 
 # Aggiungere parte di features extraction per la classificazione 
 # Aggiungere piu dataset ( http://developers.google.com/earth-engine/datasets/catalog/USDA_NASS_CDL#description) 
-# 
+
+#ciao sono qui per classificare 
