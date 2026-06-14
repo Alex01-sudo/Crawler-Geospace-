@@ -1,4 +1,4 @@
-from arango import ArangoClient
+from arango import ArangoClient, cursor
 import os
 from dotenv import load_dotenv
 from datetime import datetime
@@ -119,4 +119,21 @@ class ArangoStorageManager:
         }
         capitals_coll.update(update_data)
         
-   
+    def get_first_capital(self) -> dict | None:
+        query = """
+        FOR c IN capitals
+            LIMIT 1
+            RETURN c
+        """
+        cursor = self.db.aql.execute(query)
+        
+        return cursor.next()
+    
+    def reset_visited_status(self):
+        
+        query = """
+        FOR c IN capitals
+            UPDATE c WITH { visited: false} IN capitals
+        """
+        self.db.aql.execute(query)
+       

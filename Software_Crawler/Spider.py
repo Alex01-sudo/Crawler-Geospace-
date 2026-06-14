@@ -1,9 +1,14 @@
 import os
 import time
+import io
+import rasterio
+import numpy as np
 from pathlib import Path
 from dotenv import load_dotenv
 from Software_Crawler.Storage import ArangoStorageManager
 from Software_Crawler.download import download_sentinel_composite_to_drive
+from Utils.Get_google_drive import get_tif_from_drive
+
 
 
 load_dotenv()
@@ -101,3 +106,33 @@ class GraphSpider:
 
         print("\n Crawling completated. ")
 
+
+    def extract_features(self):
+        
+        print("Extracting features...")
+        self.storage.reset_visited_status()
+        current_node = self.find_starting_node()
+        while current_node is not None:
+            path_tif = current_node["file_tif_path"]
+            name_tif = Path(path_tif).name if path_tif else "None"
+            
+            if name_tif is not None:
+                print(f"Extracting features for {current_node['city']}...")
+                raw_data = get_tif_from_drive(name_tif, os.getenv("GOOGLE_CLOUD_CREDENTIALS"))
+                if raw_data:
+                    file_tif = io.BytesIO(raw_data)
+
+                    with rasterio.open(file_tif) as src:
+                        band_R = np.array(src.read(1))
+                        band_G = np.array(src.read(2))
+                        band_B = np.array(src.read(3))  
+        
+                        image_RGB = np.stack((band_R, band_G, band_B), axis=-1)
+                        
+                    
+                        
+            
+            
+            
+        
+        

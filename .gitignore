@@ -30,3 +30,5 @@ Desktop.ini
 
 .env
 .vscode/
+
+google_drive_credential.json
