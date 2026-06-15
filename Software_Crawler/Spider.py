@@ -3,11 +3,14 @@ import time
 import io
 import rasterio
 import numpy as np
+from PIL import Image
 from pathlib import Path
 from dotenv import load_dotenv
 from Software_Crawler.Storage import ArangoStorageManager
 from Software_Crawler.download import download_sentinel_composite_to_drive
 from Utils.Get_google_drive import get_tif_from_drive
+from Utils.Features_extractor import load_hf_model_and_processor, extract_embedding_vector
+
 
 
 
@@ -99,7 +102,7 @@ class GraphSpider:
                 
                 current_node = next_node
             else:
-                current_node = self.find_starting_node()
+                current_node = None
                 
             
             time.sleep(2)
@@ -109,7 +112,8 @@ class GraphSpider:
 
     def extract_features(self):
         
-        print("Extracting features...")
+        processor, model = load_hf_model_and_processor("google/vit-base-patch16-224")  
+        
         self.storage.reset_visited_status()
         current_node = self.find_starting_node()
         while current_node is not None:
@@ -129,10 +133,22 @@ class GraphSpider:
         
                         image_RGB = np.stack((band_R, band_G, band_B), axis=-1)
                         
+                        if image_RGB.max() > 255:
+                             image_rgb = np.clip(image_RGB / 3000.0 * 255, 0, 255).astype(np.uint8)
+                        else:
+                             image_rgb = image_RGB.astype(np.uint8)
+
+                        input = Image.fromarray(image_rgb)
                     
-                        
+                        embedding = extract_embedding_vector(input, processor, model)
+
+                        self.storage.add_attribute(current_node["city"], "embedding_vector", embedding.tolist())
+
+                        self.storage.change_visited_status(current_node["city"], True)
             
-            
-            
+            next_node = self.find_next_neighbour(current_node)
         
-        
+            if next_node:
+                current_node = next_node
+            else:
+                current_node = None

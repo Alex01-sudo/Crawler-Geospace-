@@ -136,4 +136,23 @@ class ArangoStorageManager:
             UPDATE c WITH { visited: false} IN capitals
         """
         self.db.aql.execute(query)
+    
+    def change_visited_status(self, city: str, visited: bool):
+        key = city.lower().replace(" ", "_")
+        capitals_coll = self.db.collection("capitals")
+        
+        update_data = {
+            "_key": key,
+            "visited": visited
+        }
+        capitals_coll.update(update_data)   
        
+    def add_attribute(self, city: str, attribute_name: str, attribute_value):
+        key = city.lower().replace(" ", "_")
+        capitals_coll = self.db.collection("capitals")
+        
+        update_data = {
+            "_key": key,
+            attribute_name: attribute_value
+        }
+        capitals_coll.update(update_data)
