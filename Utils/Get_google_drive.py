@@ -29,6 +29,7 @@ def get_tif_from_drive(file_name: str, credentials_path: str) -> bytes | None:
     Returns the file content as bytes if found, otherwise None.
     """
     file_id = get_drive_file_id_by_name(file_name, credentials_path)
+    print(f"File ID for '{file_name}': {file_id}")  # Debugging line to check the file ID
     if not file_id:
         print(f"File '{file_name}' not found in Google Drive.")
         return None

@@ -127,9 +127,9 @@ class GraphSpider:
                     file_tif = io.BytesIO(raw_data)
 
                     with rasterio.open(file_tif) as src:
-                        band_R = np.array(src.read(1))
+                        band_B = np.array(src.read(1))
                         band_G = np.array(src.read(2))
-                        band_B = np.array(src.read(3))  
+                        band_R = np.array(src.read(3))  
         
                         image_RGB = np.stack((band_R, band_G, band_B), axis=-1)
                         
@@ -152,3 +152,4 @@ class GraphSpider:
                 current_node = next_node
             else:
                 current_node = None
+                

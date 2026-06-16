@@ -69,28 +69,49 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+import ee
+
 def initialize_ee(
     project: str | None,
     service_account: str | None,
     service_account_key: str | None,
 ) -> None:
     try:
+        
         if service_account and service_account_key:
+            print("Service Account credentials found. Initializing GEE with Service Account...")
             credentials = ee.ServiceAccountCredentials(service_account, service_account_key)
             if project:
                 ee.Initialize(credentials=credentials, project=project)
             else:
                 ee.Initialize(credentials=credentials)
             return
+
+        
+        print(" Using local user credentials for GEE initialization...")
+        
+        
         if project:
-            ee.Initialize(project=project)
+            
+            try:
+                ee.Initialize(project=project)
+            except Exception:
+                credentials = ee.data.get_persistent_credentials()
+                ee.Initialize(credentials=credentials, project=project)
         else:
-            ee.Initialize()
+            try:
+                ee.Initialize()
+            except Exception:
+                credentials = ee.data.get_persistent_credentials()
+                ee.Initialize(credentials=credentials)
+                
+       
+
     except Exception as init_error:
         raise RuntimeError(
-            "Google Earth Engine init failed. Use interactive auth with earthengine authenticate, "
-            "or pass --service-account and --service-account-key (or env vars "
-            "GEE_SERVICE_ACCOUNT and GEE_SERVICE_ACCOUNT_KEY)."
+            "Google Earth Engine init failed. Assicurati di aver lanciato 'earthengine authenticate' "
+            "nel terminale dell'ambiente virtuale attivo, oppure verifica che le variabili d'ambiente "
+            "del Service Account nel file .env siano caricate correttamente tramite load_dotenv()."
         ) from init_error
 
 
@@ -203,6 +224,110 @@ def main() -> None:
     
     
     download_sentinel_composite_to_drive(**vars(args))
+
+
+
+def download_NASS_dataset_to_drive(
+    lat: float,
+    lon: float,
+    buffer_m: float = 1000.0,
+    year: int = 2023,
+    scale: float = 10.0,
+    city_name: str = "capital_task",
+    drive_folder: str = "GEE_NASS_Outputs",
+    project: str | None = None,
+    service_account: str | None = None,
+    service_account_key: str | None = None,
+) -> int:
+    
+    
+    project = project or os.getenv("GOOGLE_CLOUD_PROJECT")
+    service_account = service_account or os.getenv("GEE_SERVICE_ACCOUNT")
+    service_account_key = service_account_key or os.getenv("GEE_SERVICE_ACCOUNT_KEY")
+    
+    initialize_ee(project, service_account, service_account_key)
+
+    point = ee.Geometry.Point([lon, lat])
+    square = point.buffer(buffer_m).bounds()
+    start_date = f"{year}-01-01"
+    end_date = f"{year}-12-31"
+
+    image_cl = (
+        ee.ImageCollection("USDA/NASS/CDL")
+        .filterBounds(square)
+        .filterDate(start_date, end_date)
+        .select("cropland")
+        .first()
+    )
+    
+    image_to_export = image_cl.clip(square)
+    
+    image_to_export = image_to_export.uint8().set({"cropland_class_names": None})
+
+    
+    try:
+        image_to_export.bandNames().getInfo()
+    except Exception as e:
+        raise RuntimeError(
+            f"No NASS images found for coordinates ({lat}, {lon}) in year {year} with current constraints."
+        ) from e
+    
+    
+    
+    file_prefix = f"NASS_{city_name.lower().replace(' ', '_')}"
+
+    
+    image_task = ee.batch.Export.image.toDrive(
+        image=image_to_export,
+        description=f"{file_prefix}_image",
+        folder=drive_folder,
+        fileNamePrefix=file_prefix,
+        region=square,
+        scale=scale,
+        fileFormat="GeoTIFF",
+        maxPixels=1e9
+    )
+
+    roi_feature = ee.Feature(square, {
+        "lat": lat,
+        "lon": lon,
+        "buffer_m": buffer_m,
+        "year": year,
+        "scale": scale
+    })
+    roi_collection = ee.FeatureCollection([roi_feature])
+
+    table_task = ee.batch.Export.table.toDrive(
+        collection=roi_collection,
+        description=f"{file_prefix}_roi",
+        folder=drive_folder,
+        fileNamePrefix=f"{file_prefix}_roi",
+        fileFormat="GeoJSON"
+    )
+
+    
+    image_task.start()
+    table_task.start()
+    print(f" Tasks started in the Cloud for {city_name}.")
+    print(f"   Image Task ID: {image_task.id}")
+    print(f"   ROI Table Task ID: {table_task.id}")
+    
+    while image_task.active() or table_task.active():
+        print(f" Processing {city_name} on Google servers...")
+        print(f"  [Image Status: {image_task.status()['state']}] [ROI Status: {table_task.status()['state']}]")
+        time.sleep(15)  
+        
+    
+    final_image_status = image_task.status()
+    final_table_status = table_task.status()
+
+    if final_image_status['state'] == 'COMPLETED' and final_table_status['state'] == 'COMPLETED':
+        print(f" Success! Both files for {city_name} are now saved in your Google Drive under '{drive_folder}'")
+    else:
+        error_msg = f"Image Error: {final_image_status.get('errorMessage', 'None')} | Table Error: {final_table_status.get('errorMessage', 'None')}"
+        raise RuntimeError(f" Earth Engine tasks failed for {city_name}. Details: {error_msg}")
+
+    
 
 
 if __name__ == "__main__":
