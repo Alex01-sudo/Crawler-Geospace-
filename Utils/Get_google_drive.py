@@ -22,6 +22,24 @@ def get_drive_file_id_by_name(file_name: str, credentials_path: str) -> str | No
         return items[0]['id'] # This is the unique ID needed for cloud downloads
     return None
 
+def get_drive_folder_id_by_name(folder_name: str, credentials_path: str) -> str | None:
+    
+    scopes = ['https://www.googleapis.com/auth/drive.readonly']
+    creds = service_account.Credentials.from_service_account_file(credentials_path, scopes=scopes)
+    
+    # Build the Drive API client
+    service = build('drive', 'v3', credentials=creds)
+    
+    # Create an explicit search query for the folder name
+    search_query = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+    
+    results = service.files().list(q=search_query, fields="files(id, name)").execute()
+    items = results.get('files', [])
+    
+    if items:
+        return items[0]['id'] # This is the unique ID needed for cloud downloads
+    return None
+
 
 def get_tif_from_drive(file_name: str, credentials_path: str) -> bytes | None:
     """

@@ -61,22 +61,12 @@ class ArangoStorageManager:
             "scale": scale,
             "visited": False,
             "file_tif_path": None,
-            "file_path_geojson": None,
+            "file_geojson_path": None,
             "image_count": 0
         }
         
         
         capitals_coll.insert(documento, overwrite=True)
-
-    def get_lon_lat(self, citta: str):
-        capitals_coll = self.db.collection("capitals")
-        key = citta.lower().replace(" ", "_")
-        query = f"""FOR cap IN capitals
-                    FILTER cap._key == "{key}"
-                    RETURN {{"lat": cap.lat, "lon" : cap.lon}}"""
-        cursor = self.db.aql.execute(query)
-        result = cursor.next()
-        return result 
 
     def add_edge(self, city_A: str, city_B: str, distance_km: float):
         
@@ -99,6 +89,15 @@ class ArangoStorageManager:
         query = """
         FOR c IN capitals
             FILTER c.visited == false
+            RETURN c
+        """
+        cursor = self.db.aql.execute(query)
+        return [doc for doc in cursor]
+    
+    def capitals_visited(self) -> list:
+        query = """
+        FOR c IN capitals
+            FILTER c.visited == true
             RETURN c
         """
         cursor = self.db.aql.execute(query)

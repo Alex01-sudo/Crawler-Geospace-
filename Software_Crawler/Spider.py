@@ -7,7 +7,7 @@ from PIL import Image
 from pathlib import Path
 from dotenv import load_dotenv
 from Software_Crawler.Storage import ArangoStorageManager
-from Software_Crawler.download import download_sentinel_composite_to_drive
+from Software_Crawler.download import download_NASS_dataset_to_drive, download_sentinel_composite_to_drive
 from Utils.Get_google_drive import get_tif_from_drive
 from Utils.Features_extractor import load_hf_model_and_processor, extract_embedding_vector
 
@@ -152,4 +152,37 @@ class GraphSpider:
                 current_node = next_node
             else:
                 current_node = None
-                
+
+            
+
+    def crawling_Nass_classification(self):
+        print("Starting crawling on Nass classification...")
+        drive_folder = "GEE_NASS_Outputs"
+        #self.storage.reset_visited_status()
+        current_node = self.find_starting_node()                    
+        
+        
+        while current_node is not None:
+            
+            try:
+                city = current_node["city"]
+                file_prefix = f"NASS_{city.lower().replace(' ', '_')}"
+                lat = current_node["lat"]
+                lon = current_node["lon"]
+                download_NASS_dataset_to_drive(lat = lat, lon = lon, city_name = city, drive_folder = drive_folder, year = 2023)
+                self.storage.add_attribute(city, attribute_name="nass_geojson_path", attribute_value=f"{drive_folder}/{file_prefix}_roi.geojson")
+                self.storage.add_attribute(city, attribute_name="nass_tif_path", attribute_value=f"{drive_folder}/{file_prefix}.tif")
+                self.storage.change_visited_status(city, True)
+        
+            except Exception as e:
+                print(f"Error while crawling on NASS classification for {city}: {e}")
+                next_node = self.find_next_neighbour(current_node)        
+                current_node = next_node if next_node else None   
+                time.sleep(2)
+                continue
+            
+            next_node = self.find_next_neighbour(current_node)        
+            current_node = next_node if next_node else None   
+            time.sleep(2)
+        
+        print("\n Crawling on NASS classification completed.")    
