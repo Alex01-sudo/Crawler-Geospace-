@@ -21,6 +21,7 @@ def align_nass_to_sentinel(sentinel_path: str, nass_path: str):
         
         out_profile = master_profile.copy()
         out_profile.update({
+            'driver': 'GTiff',
             'dtype': 'uint8',
             'count': 1, 
             'nodata': 0

@@ -124,7 +124,7 @@ def ensure_parent(path: Path) -> None:
 def download_sentinel_composite_to_drive(
     lat: float,
     lon: float,
-    buffer_m: float = 1000.0,
+    buffer_m: float = 10000.0,
     start_date: str = "2023-06-01",
     end_date: str = "2023-08-31",
     cloud_max: float = 10.0,
@@ -230,7 +230,7 @@ def main() -> None:
 def download_NASS_dataset_to_drive(
     lat: float,
     lon: float,
-    buffer_m: float = 1000.0,
+    buffer_m: float = 10000.0,
     year: int = 2023,
     scale: float = 10.0,
     city_name: str = "capital_task",

@@ -158,7 +158,7 @@ class GraphSpider:
     def crawling_Nass_classification(self):
         print("Starting crawling on Nass classification...")
         drive_folder = "GEE_NASS_Outputs"
-        #self.storage.reset_visited_status()
+        self.storage.reset_visited_status()
         current_node = self.find_starting_node()                    
         
         

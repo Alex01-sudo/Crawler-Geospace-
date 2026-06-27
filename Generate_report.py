@@ -3,14 +3,14 @@ import time
 from pathlib import Path
 from dotenv import load_dotenv
 
-from Retrieval_Task.Retrieval_System import RetrievalSystem
+from Retrieval_Task.Report_generator import ReportGenerator
 
 
 load_dotenv()
 
 def main():
-    Spider = RetrievalSystem()
-    Spider.align_task()   
+    generator = ReportGenerator()
+    generator.generate_report()
 
 
 if __name__ == "__main__":

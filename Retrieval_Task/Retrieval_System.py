@@ -1,11 +1,11 @@
+
 import os
 
 from dotenv import load_dotenv
-import rasterio
-import io
+from Utils.Read_rasterio import plot_rasterio 
 from Software_Crawler.Storage import ArangoStorageManager
-from Utils.Align_masks import align_nass_to_sentinel
-from Utils.Get_google_drive import get_tif_from_drive, get_drive_folder_id_by_name
+from Utils.Get_google_drive import get_tif_from_drive
+from Utils.Read_rasterio import plot_rasterio
 
 
 load_dotenv()
@@ -15,65 +15,58 @@ class RetrievalSystem:
         
         self.storage = ArangoStorageManager()
         self.db = self.storage.db
-    
-    def retrieve_starting_node(self) -> dict | None:
-        
-        capitals_not_visited = self.storage.capitals_visited()
-        if capitals_not_visited:
-            return capitals_not_visited[0] # update later for a better strategy
-        return None
-    
-    def retrieve_next_neighbour(self, current_node: str) -> dict | None:
-        query = """
-        FOR vertex, edge IN 1..1 OUTBOUND @start_node GRAPH UsaCapitalsGraph
-            FILTER vertex.visited == true
-            SORT edge.distance_km ASC
-            LIMIT 1
-            RETURN vertex
-        """
-        bind_vars = {"start_node": current_node}
-        cursor = self.db.aql.execute(query, bind_vars=bind_vars)
-        try: 
-        
-            risultato = cursor.next()
-        except StopIteration:
-           
-            return None
+
+    def define_index(self):
        
-        return risultato
+        self.storage.set_up_index()
+        
+    def retrieve_answer_set(self, query_lan_lon_range: list) -> dict:
+        
+        query = """
+                FOR doc IN capitals
+                SORT DISTANCE(doc.coordinates[1], doc.coordinates[0], @query_lat, @query_lon) ASC
+                LIMIT 10
+                RETURN {
+                 city : doc.city,
+                 histogram : doc.histogram,
+                 }
+                """
+                
+        bind_vars = {
+            "query_lat": query_lan_lon_range[0],
+            "query_lon": query_lan_lon_range[1],
+        }
+        cusror = self.db.aql.execute(query, bind_vars=bind_vars)
+        results = []
+        for doc in cusror:
+            results.append(doc)
+        
+        #print(f"Results for query {query_lan_lon_range}: {results}")
+        return results
+        
+    def ranking_function(self, query : list) -> list:
+        
+        ranked_results = []
+        self.define_index()
+        answer_set = self.retrieve_answer_set(query)
+        for answer in answer_set:
+            answer_histogram = answer["histogram"]
+            score = answer_histogram.get("124", 0) 
+            ranked_results.append((answer["city"], score))
+            
+        ranked_results.sort(key=lambda x: x[1], reverse=True)    
+        return ranked_results 
     
-    def  retrieve_city(self):
-            
-            current_node = self.retrieve_starting_node()
-            while current_node is not None:
-                city = current_node["city"]
-                cloud_filename = f"Aligned_NASS_{city.lower().replace(' ', '_')}"
-                S2_file_name = current_node["file_tif_path"].split("/")[-1]
-                NASS_file_name = current_node["nass_tif_path"].split("/")[-1]
-                raw_data1 = get_tif_from_drive(S2_file_name, os.getenv("GOOGLE_CLOUD_CREDENTIALS"))
-                raw_data2 = get_tif_from_drive(NASS_file_name, os.getenv("GOOGLE_CLOUD_CREDENTIALS"))
-
-                try:
-                    file_tif = io.BytesIO(raw_data1)
-                    file_tif_NASS = io.BytesIO(raw_data2)
-                    id_folder = get_drive_folder_id_by_name("GEE_NASS_Aligned", os.getenv("GOOGLE_CLOUD_CREDENTIALS"))
-                    mask  = align_nass_to_sentinel(file_tif, file_tif_NASS)
-
-                    
-                except Exception as e:
-                    print(f"Error processing {city}: {e}")
-                    break       
-                
-                next_node = self.retrieve_next_neighbour(current_node)
-                
-                if next_node:
-                
-                    current_node = next_node
-                else:
-                
-                    current_node = None
-                    
-                    
-            
-                    
-
+    
+    def print_images(self, query: list):
+        ranked_results = self.ranking_function(query)
+        print(f"Ranked results for query {query}:")
+        print(ranked_results)
+        raw_data_list = []
+        for city, score in ranked_results:
+            city_key = city.lower().replace(' ', '_')
+            cloud_filename = f"S2_{city_key}.tif"
+            raw_data = get_tif_from_drive(cloud_filename, os.getenv("GOOGLE_CLOUD_CREDENTIALS"))
+            raw_data_list.append(raw_data)
+        
+        plot_rasterio(raw_data_list, ranked_results)

@@ -155,3 +155,23 @@ class ArangoStorageManager:
             attribute_name: attribute_value
         }
         capitals_coll.update(update_data)
+        
+    def set_up_index(self):
+        
+        
+        query = """
+        FOR doc IN capitals
+            FILTER HAS(doc, 'lat') AND HAS(doc, 'lon') AND !HAS(doc, 'coordinates')
+            
+            UPDATE doc WITH { 
+                coordinates: [doc.lon, doc.lat] 
+            } IN capitals
+        """
+        try:
+            cursor = self.db.aql.execute(query)
+        
+            collection = self.db.collection("capitals")
+            collection.ensure_geo_index(fields=['coordinates'])
+        
+        except Exception as e:
+            print(f"Error setting up index: {e}")
