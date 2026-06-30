@@ -44,23 +44,23 @@ class RetrievalSystem:
         #print(f"Results for query {query_lan_lon_range}: {results}")
         return results
         
-    def ranking_function(self, query : list) -> list:
+    def ranking_function(self, query : list, label : str) -> list:
         
         ranked_results = []
         self.define_index()
         answer_set = self.retrieve_answer_set(query)
         for answer in answer_set:
             answer_histogram = answer["histogram"]
-            score = answer_histogram.get("124", 0) 
+            score = answer_histogram.get(label, 0)
             ranked_results.append((answer["city"], score))
             
         ranked_results.sort(key=lambda x: x[1], reverse=True)    
         return ranked_results 
     
     
-    def print_images(self, query: list):
-        ranked_results = self.ranking_function(query)
-        print(f"Ranked results for query {query}:")
+    def print_images(self, query: list, label: str):
+        ranked_results = self.ranking_function(query, label)
+        print(f"Ranked results for query {query} and label {label}:")
         print(ranked_results)
         raw_data_list = []
         for city, score in ranked_results:

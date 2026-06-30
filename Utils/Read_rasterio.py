@@ -24,7 +24,7 @@ def normalization(img):
         return img
         
     
-    p_min, p_max = np.percentile(img, (2, 98))
+    p_min, p_max = np.nanpercentile(img, (2, 98))
     
     
     img_norm = np.clip((img - p_min) / (p_max - p_min), 0, 1)

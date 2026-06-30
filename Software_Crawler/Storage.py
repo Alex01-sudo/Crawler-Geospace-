@@ -171,7 +171,9 @@ class ArangoStorageManager:
             cursor = self.db.aql.execute(query)
         
             collection = self.db.collection("capitals")
-            collection.ensure_geo_index(fields=['coordinates'])
+            collection.add_geo_index(fields=['coordinates'])
         
         except Exception as e:
             print(f"Error setting up index: {e}")
+            
+        print("Index setup completed on capitals.")
