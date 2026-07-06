@@ -26,7 +26,7 @@ class GraphSpider:
         
         capitals_not_visited = self.storage.capitals_to_visit()
         if capitals_not_visited:
-            return capitals_not_visited[0] # update later for a better strategy
+            return capitals_not_visited[0] 
         return None
 
     def find_next_neighbour(self, current_node: str) -> dict | None:

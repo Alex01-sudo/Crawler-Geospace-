@@ -13,7 +13,6 @@ def main():
     parser.add_argument("--RankFun", type=str, required=True, choices=["121", "122", "123", "124"], help="Which ranking function to use (121, 122, 123, 124)")
     args = parser.parse_args()
     R_sys = RetrievalSystem()
-    R_sys.define_index()
     R_sys.print_images(query=args.query, label=args.RankFun) 
     
     

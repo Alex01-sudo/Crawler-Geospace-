@@ -109,9 +109,9 @@ def initialize_ee(
 
     except Exception as init_error:
         raise RuntimeError(
-            "Google Earth Engine init failed. Assicurati di aver lanciato 'earthengine authenticate' "
-            "nel terminale dell'ambiente virtuale attivo, oppure verifica che le variabili d'ambiente "
-            "del Service Account nel file .env siano caricate correttamente tramite load_dotenv()."
+            "Google Earth Engine init failed. Ensure to be authenticated with 'earthengine authenticate' "
+            "in the terminal of the active virtual environment, or verify that the Service Account variables "
+            "in the .env file are loaded correctly via load_dotenv()."
         ) from init_error
 
 
@@ -219,7 +219,7 @@ def download_sentinel_composite_to_drive(
     return image_count
 
 def main() -> None:
-    """Mantiene la compatibilità per l'esecuzione diretta da Terminale."""
+    
     args = build_parser().parse_args()
     
     
