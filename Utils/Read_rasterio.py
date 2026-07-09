@@ -67,6 +67,6 @@ def plot_rasterio(list_answers_ranked: bytes, ranked_results: list):
             
         ax.axis('off')
 
-    # 4. Mostra il plot
+    
     plt.tight_layout()
     plt.show()
