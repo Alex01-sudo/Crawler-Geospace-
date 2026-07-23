@@ -1,10 +1,5 @@
-import os
-import time
-from pathlib import Path
-from dotenv import load_dotenv
-from geopy.geocoders import Nominatim
 
-from Software_Crawler.Storage import ArangoStorageManager
+from dotenv import load_dotenv
 from Software_Crawler.Spider import GraphSpider
 
 load_dotenv()
@@ -20,7 +15,5 @@ if __name__ == "__main__":
 
 
 
-# Aggiungere parte di features extraction per la classificazione 
-# Aggiungere piu dataset ( http://developers.google.com/earth-engine/datasets/catalog/USDA_NASS_CDL#description) 
 
 

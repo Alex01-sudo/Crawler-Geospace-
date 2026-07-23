@@ -19,9 +19,21 @@ def read_rasterio(raw_data: bytes):
         band3 = src.read(3)
     return np.dstack((band3, band2, band1))
 
+def NASS_read(raw_data: bytes):
+
+    if raw_data:
+        file_tif = io.BytesIO(raw_data)
+        
+    with rasterio.open(file_tif) as src:
+        band1 = src.read(4)
+        
+    return np.array(band1)
+
+
+
+
 def normalization(img):
-    if np.max(img) <= 255:
-        return img
+    
         
     
     p_min, p_max = np.percentile(img, (2, 98))

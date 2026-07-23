@@ -7,9 +7,10 @@ from PIL import Image
 from pathlib import Path
 from dotenv import load_dotenv
 from Software_Crawler.Storage import ArangoStorageManager
-from Software_Crawler.download import download_NASS_dataset_to_drive, download_sentinel_composite_to_drive
+from Software_Crawler.download import download_NASS_dataset_to_drive, download_sentinel_composite_to_drive, extract_era5_climate_data
 from Utils.Get_google_drive import get_tif_from_drive
 from Utils.Features_extractor import load_hf_model_and_processor, extract_embedding_vector
+from Utils.Read_rasterio import read_rasterio, normalization
 
 
 
@@ -20,83 +21,67 @@ class GraphSpider:
     def __init__(self):
         
         self.storage = ArangoStorageManager()
-        self.db = self.storage.db  
+          
 
     def find_starting_node(self) -> dict | None:
         
-        capitals_not_visited = self.storage.capitals_to_visit()
-        if capitals_not_visited:
-            return capitals_not_visited[0] # update later for a better strategy
+        nodes_not_visited = self.storage.node_to_visit()
+        if nodes_not_visited:
+            return nodes_not_visited[0] # update later for a better strategy
         return None
 
-    def find_next_neighbour(self, current_node: str) -> dict | None:
-        query = """
-        FOR vertex, edge IN 1..1 OUTBOUND @start_node GRAPH UsaCapitalsGraph
-            FILTER vertex.visited == false
-            SORT edge.distance_km ASC
-            LIMIT 1
-            RETURN vertex
-        """
-        bind_vars = {"start_node": current_node}
-        cursor = self.db.aql.execute(query, bind_vars=bind_vars)
-        try: 
-        
-            risultato = cursor.next()
-        except StopIteration:
-           
-            return None
-       
-        return risultato
+    
 
     def execute_crawl(self):
         print("Execute crawling...")
         
-        
+        self.storage.set_up_index()
         current_node = self.find_starting_node()
         
         while current_node is not None:
-            city = current_node["city"]
-            key = current_node["_key"]
-            nodo_id = f"capitals/{key}"
             
-            print(f"\n Spider located in: {city} ({current_node['state']})")
+            key = current_node["_key"]
+            nodo_id = f"nodes/{key}"
+            lat, lon = current_node["coordinates"][1], current_node["coordinates"][0]
+            
+            print(f"\n Spider located in: {current_node['coordinates']}")
             
             try:
                 
-                drive_folder = "GEE_Crawler_Outputs"
+                drive_folder = "GEE_Crawler_Outputs_thesis"
                 
-                print(f" Calling gee for {city}...")
+                print(f" Calling gee for {current_node['coordinates']}...")
                 img_count = download_sentinel_composite_to_drive(
-                    lat=current_node["lat"],
-                    lon=current_node["lon"],
+                    lat=lat,
+                    lon=lon,
                     buffer_m=current_node["buffer_m"],
                     scale=current_node["scale"],
-                    city_name=city,
                     drive_folder=drive_folder
                 )
                 
                 
-                file_prefix = f"S2_{city.lower().replace(' ', '_')}"
+                file_prefix = f"S2_{round(lat, 2)}_{round(lon, 2)}"
 
                 
                 predicted_tif_path = f"{drive_folder}/{file_prefix}.tif"
                 predicted_geojson_path = f"{drive_folder}/{file_prefix}_roi.geojson"
                 
                 self.storage.set_visited(
-                    city=city, 
+                    lat=lat,
+                    lon=lon,
                     drive_tif_path=predicted_tif_path, 
                     drive_geojson_path=predicted_geojson_path,
                     img_count=img_count
                     
                    
                 )
-                print(f"{city} saved in the storage.")
+                print(f"{lat}, {lon} saved in the storage.")
                 
             except Exception as e:
-                print(f" error while crawling in  {city}: {e}")
-                break 
+                print(f" error while crawling in  {lat}, {lon}: {e}")
+                continue
 
-            next_node = self.find_next_neighbour(nodo_id)
+            next_node = self.storage.find_next_neighbour(current_node)
             
             if next_node:
                 
@@ -121,32 +106,24 @@ class GraphSpider:
             name_tif = Path(path_tif).name if path_tif else "None"
             
             if name_tif is not None:
-                print(f"Extracting features for {current_node['city']}...")
+                print(f"Extracting features for {current_node['coordinates']}...")
                 raw_data = get_tif_from_drive(name_tif, os.getenv("GOOGLE_CLOUD_CREDENTIALS"))
                 if raw_data:
-                    file_tif = io.BytesIO(raw_data)
-
-                    with rasterio.open(file_tif) as src:
-                        band_B = np.array(src.read(1))
-                        band_G = np.array(src.read(2))
-                        band_R = np.array(src.read(3))  
-        
-                        image_RGB = np.stack((band_R, band_G, band_B), axis=-1)
-                        
-                        if image_RGB.max() > 255:
-                             image_rgb = np.clip(image_RGB / 3000.0 * 255, 0, 255).astype(np.uint8)
-                        else:
-                             image_rgb = image_RGB.astype(np.uint8)
-
-                        input = Image.fromarray(image_rgb)
                     
-                        embedding = extract_embedding_vector(input, processor, model)
+                    image = read_rasterio(raw_data)
+                    image_rgb = normalization(image)
 
-                        self.storage.add_attribute(current_node["city"], "embedding_vector", embedding.tolist())
+                    image_uint8 = (image_rgb * 255.0).astype(np.uint8)
+                    input = Image.fromarray(image_uint8)
+                
+                
+                    embedding = extract_embedding_vector(input, processor, model)
 
-                        self.storage.change_visited_status(current_node["city"], True)
-            
-            next_node = self.find_next_neighbour(current_node)
+                    self.storage.add_attribute(current_node["coordinates"][1],current_node["coordinates"][0], "embedding_vector", embedding.tolist())
+
+                    self.storage.change_visited_status(current_node["coordinates"][1],current_node["coordinates"][0], True)
+        
+            next_node = self.storage.find_next_neighbour(current_node)
         
             if next_node:
                 current_node = next_node
@@ -157,7 +134,39 @@ class GraphSpider:
 
     def crawling_Nass_classification(self):
         print("Starting crawling on Nass classification...")
-        drive_folder = "GEE_NASS_Outputs"
+        drive_folder = "GEE_NASS_Outputs_thesis"
+        #self.storage.reset_visited_status()
+        current_node = self.find_starting_node()                    
+        
+        
+        while current_node is not None:
+            
+            try:
+                
+                file_prefix = f"NASS_{round(current_node['coordinates'][1], 2)}_{round(current_node['coordinates'][0], 2)}"
+                lat = current_node["coordinates"][1]
+                lon = current_node["coordinates"][0]
+                download_NASS_dataset_to_drive(lat = lat, lon = lon, drive_folder = drive_folder, year = 2023)
+                self.storage.add_attribute(lat, lon, attribute_name="nass_geojson_path", attribute_value=f"{drive_folder}/{file_prefix}_roi.geojson")
+                self.storage.add_attribute(lat, lon, attribute_name="nass_tif_path", attribute_value=f"{drive_folder}/{file_prefix}.tif")
+                self.storage.change_visited_status(lat, lon, True)
+
+            except Exception as e:
+                print(f"Error while crawling on NASS classification for {lat}, {lon}: {e}")
+                next_node = self.storage.find_next_neighbour(current_node)        
+                current_node = next_node if next_node else None   
+                time.sleep(2)
+                continue
+            
+            next_node = self.storage.find_next_neighbour(current_node)        
+            current_node = next_node if next_node else None   
+            time.sleep(2)
+        
+        print("\n Crawling on NASS classification completed.")    
+    
+    
+    def ERA_crawling (self):
+        print("Starting crawling on ERA5 climate data...")
         self.storage.reset_visited_status()
         current_node = self.find_starting_node()                    
         
@@ -165,24 +174,24 @@ class GraphSpider:
         while current_node is not None:
             
             try:
-                city = current_node["city"]
-                file_prefix = f"NASS_{city.lower().replace(' ', '_')}"
-                lat = current_node["lat"]
-                lon = current_node["lon"]
-                download_NASS_dataset_to_drive(lat = lat, lon = lon, city_name = city, drive_folder = drive_folder, year = 2023)
-                self.storage.add_attribute(city, attribute_name="nass_geojson_path", attribute_value=f"{drive_folder}/{file_prefix}_roi.geojson")
-                self.storage.add_attribute(city, attribute_name="nass_tif_path", attribute_value=f"{drive_folder}/{file_prefix}.tif")
-                self.storage.change_visited_status(city, True)
-        
+                
+                lat = current_node["coordinates"][1]
+                lon = current_node["coordinates"][0]
+                climate_data = extract_era5_climate_data(lat=lat, lon=lon, buffer_m=current_node["buffer_m"])
+                self.storage.add_attribute(lat, lon, attribute_name="climate_data", attribute_value=climate_data)
+                self.storage.change_visited_status(lat, lon, True)
+
             except Exception as e:
-                print(f"Error while crawling on NASS classification for {city}: {e}")
-                next_node = self.find_next_neighbour(current_node)        
+                print(f"Error while crawling on ERA5 climate data for {lat}, {lon}: {e}")
+                next_node = self.storage.find_next_neighbour(current_node)        
                 current_node = next_node if next_node else None   
                 time.sleep(2)
                 continue
             
-            next_node = self.find_next_neighbour(current_node)        
+            next_node = self.storage.find_next_neighbour(current_node)        
             current_node = next_node if next_node else None   
             time.sleep(2)
         
-        print("\n Crawling on NASS classification completed.")    
+        print("\n Crawling on ERA5 climate data completed.")
+        
+        

@@ -1,6 +1,7 @@
 from Utils.Get_google_drive import get_tif_from_drive
 from dotenv import load_dotenv
 from Utils.Align_masks import align_nass_to_sentinel
+from Utils.Read_rasterio import normalization, read_rasterio
 import os
 import rasterio
 import matplotlib.pyplot as plt
@@ -11,23 +12,17 @@ load_dotenv()
 
 
 
-raw_data1 = get_tif_from_drive("S2_Olympia.tif", os.getenv("GOOGLE_CLOUD_CREDENTIALS"))
+raw_data1 = get_tif_from_drive("S2_41.93_-104.76.tif", os.getenv("GOOGLE_CLOUD_CREDENTIALS"))
 print(f"Raw data type: {type(raw_data1)}")
-raw_data2 = get_tif_from_drive("NASS_Olympia.tif", os.getenv("GOOGLE_CLOUD_CREDENTIALS"))
+raw_data2 = get_tif_from_drive("NASS_41.93_-104.76.tif", os.getenv("GOOGLE_CLOUD_CREDENTIALS"))
 if raw_data1:
     file_tif = io.BytesIO(raw_data1)
     file_tif_NASS = io.BytesIO(raw_data2)
     
     mask = align_nass_to_sentinel(file_tif, file_tif_NASS)
 
-    with rasterio.open(file_tif) as src:
-        print(f"Numero di bande: {src.count}")
-        print(f"Risoluzione: {src.width}x{src.height}")
-        
-        
-        band1 = src.read(1)
-
-        print(f"Valori della prima banda: {band1}")
+    band1 = read_rasterio(raw_data1)
+    band1 = normalization(band1)
             
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 
