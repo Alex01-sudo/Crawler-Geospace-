@@ -167,7 +167,7 @@ class ReportGenerator:
             
     def  generate_report(self):
             
-            #self.storage.reset_visited_status()
+            self.storage.reset_visited_status()
             current_node = self.retrieve_starting_node()
             while current_node is not None:
                 lon , lat = current_node["coordinates"][0], current_node["coordinates"][1]
