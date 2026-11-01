@@ -1,5 +1,3 @@
-
-
 services:
   arangodb:
     image: arangodb:3.11
@@ -9,13 +7,11 @@ services:
     environment:
       - ARANGO_ROOT_PASSWORD=${ARANGO_ROOT_PASSWORD}
     volumes:
-      
-      - arango_data:/var/lib/arangodb3
-      
-      - arango_apps:/var/lib/arangodb3-apps
+      - crawler-geospace-_arango_data:/var/lib/arangodb3
+      - crawler-geospace-_arango_apps:/var/lib/arangodb3-apps
 
 volumes:
-  arango_data:
-    driver: local
-  arango_apps:
-    driver: local
+  crawler-geospace-_arango_data:
+    external: true
+  crawler-geospace-_arango_apps:
+    external: true
